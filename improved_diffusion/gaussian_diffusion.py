@@ -137,8 +137,8 @@ class GaussianDiffusion:
 
         self.num_timesteps = int(betas.shape[0])
 
-        alphas = 1.0 - betas
-        self.alphas_cumprod = np.cumprod(alphas, axis=0)
+        alphas = 1.0 - betas                               # array of length T
+        self.alphas_cumprod = np.cumprod(alphas, axis=0)   # array of length T
         self.alphas_cumprod_prev = np.append(1.0, self.alphas_cumprod[:-1])
         self.alphas_cumprod_next = np.append(self.alphas_cumprod[1:], 0.0)
         assert self.alphas_cumprod_prev.shape == (self.num_timesteps,)
@@ -207,7 +207,7 @@ class GaussianDiffusion:
 
     def q_posterior_mean_variance(self, x_start, x_t, t):
         """
-        Compute the mean and variance of the diffusion posterior:
+        Compute the mean and variance of the diffusion posterior:    # Ground Truth
 
             q(x_{t-1} | x_t, x_0)
 
@@ -229,7 +229,7 @@ class GaussianDiffusion:
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
-    def p_mean_variance(
+    def p_mean_variance(                                                  # Model prediction / forward (denoise) process
         self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None
     ):
         """
@@ -287,8 +287,8 @@ class GaussianDiffusion:
                     self.posterior_log_variance_clipped,
                 ),
             }[self.model_var_type]
-            model_variance = _extract_into_tensor(model_variance, t, x.shape)
-            model_log_variance = _extract_into_tensor(model_log_variance, t, x.shape)
+            model_variance = _extract_into_tensor(model_variance, t, x.shape)          # [1, 3, 64, 64]
+            model_log_variance = _extract_into_tensor(model_log_variance, t, x.shape)  # [1, 3, 64, 64]
 
         def process_xstart(x):
             if denoised_fn is not None:
@@ -306,10 +306,10 @@ class GaussianDiffusion:
             if self.model_mean_type == ModelMeanType.START_X:
                 pred_xstart = process_xstart(model_output)
             else:
-                pred_xstart = process_xstart(
+                pred_xstart = process_xstart(                                    # if ModelMeanType.EPSILON  Predict x_0 from x_t, t, eps
                     self._predict_xstart_from_eps(x_t=x, t=t, eps=model_output)
                 )
-            model_mean, _, _ = self.q_posterior_mean_variance(
+            model_mean, _, _ = self.q_posterior_mean_variance(                   # q(x_{t-1}|x_t, x_0) here x_0 is predicted from epsilon from model output
                 x_start=pred_xstart, x_t=x, t=t
             )
         else:
@@ -652,18 +652,18 @@ class GaussianDiffusion:
                  - 'output': a shape [N] tensor of NLLs or KLs.
                  - 'pred_xstart': the x_0 predictions.
         """
-        true_mean, _, true_log_variance_clipped = self.q_posterior_mean_variance(
+        true_mean, _, true_log_variance_clipped = self.q_posterior_mean_variance(  # the mean and std of q(x_{t-1}|x_0, x_t)
             x_start=x_start, x_t=x_t, t=t
         )
-        out = self.p_mean_variance(
+        out = self.p_mean_variance(                                                # predict p(x_{t-1}|x_t) using unet
             model, x_t, t, clip_denoised=clip_denoised, model_kwargs=model_kwargs
         )
-        kl = normal_kl(
+        kl = normal_kl(                                                           # loss function
             true_mean, true_log_variance_clipped, out["mean"], out["log_variance"]
         )
         kl = mean_flat(kl) / np.log(2.0)
 
-        decoder_nll = -discretized_gaussian_log_likelihood(
+        decoder_nll = -discretized_gaussian_log_likelihood(                      # p(x0|x1)
             x_start, means=out["mean"], log_scales=0.5 * out["log_variance"]
         )
         assert decoder_nll.shape == x_start.shape
@@ -671,7 +671,7 @@ class GaussianDiffusion:
 
         # At the first timestep return the decoder NLL,
         # otherwise return KL(q(x_{t-1}|x_t,x_0) || p(x_{t-1}|x_t))
-        output = th.where((t == 0), decoder_nll, kl)
+        output = th.where((t == 0), decoder_nll, kl)                  # output: loss [batch], each sample only one time step?
         return {"output": output, "pred_xstart": out["pred_xstart"]}
 
     def training_losses(self, model, x_start, t, model_kwargs=None, noise=None):
@@ -691,12 +691,12 @@ class GaussianDiffusion:
             model_kwargs = {}
         if noise is None:
             noise = th.randn_like(x_start)
-        x_t = self.q_sample(x_start, t, noise=noise)
+        x_t = self.q_sample(x_start, t, noise=noise)              # sample q(x_t | x_0)
 
         terms = {}
 
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
-            terms["loss"] = self._vb_terms_bpd(
+            terms["loss"] = self._vb_terms_bpd(                   # variational lower bound
                 model=model,
                 x_start=x_start,
                 x_t=x_t,

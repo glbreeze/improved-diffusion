@@ -106,7 +106,7 @@ def create_model(
         raise ValueError(f"unsupported image size: {image_size}")
 
     attention_ds = []
-    for res in attention_resolutions.split(","):
+    for res in attention_resolutions.split(","):  # attention_resolutions = "16,8"
         attention_ds.append(image_size // int(res))
 
     return UNetModel(
@@ -239,7 +239,7 @@ def create_gaussian_diffusion(
     rescale_learned_sigmas=False,
     timestep_respacing="",
 ):
-    betas = gd.get_named_beta_schedule(noise_schedule, steps)
+    betas = gd.get_named_beta_schedule(noise_schedule, steps)    # noise schedule: linear vs cosine
     if use_kl:
         loss_type = gd.LossType.RESCALED_KL
     elif rescale_learned_sigmas:

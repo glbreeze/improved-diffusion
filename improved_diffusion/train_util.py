@@ -197,8 +197,8 @@ class TrainLoop:
             t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
 
             compute_losses = functools.partial(
-                self.diffusion.training_losses,
-                self.ddp_model,
+                self.diffusion.training_losses,    # training_losses(model, x_0, t, model_kwargs=None, noise=None)
+                self.ddp_model,   # Unet
                 micro,
                 t,
                 model_kwargs=micro_cond,

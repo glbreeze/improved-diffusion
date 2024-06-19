@@ -300,15 +300,15 @@ class UNetModel(nn.Module):
 
     def __init__(
         self,
-        in_channels,
-        model_channels,
-        out_channels,
+        in_channels,            # 3
+        model_channels,         # 128
+        out_channels,           # 3 if not learn_sigma else 6
         num_res_blocks,
-        attention_resolutions,
+        attention_resolutions,  # image_size/16, image_size/8
         dropout=0,
         channel_mult=(1, 2, 4, 8),
         conv_resample=True,
-        dims=2,
+        dims=2,                 # 2
         num_classes=None,
         use_checkpoint=False,
         num_heads=1,
@@ -343,6 +343,7 @@ class UNetModel(nn.Module):
         if self.num_classes is not None:
             self.label_emb = nn.Embedding(num_classes, time_embed_dim)
 
+        # =========================== input blocks ===========================
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
@@ -356,7 +357,7 @@ class UNetModel(nn.Module):
         for level, mult in enumerate(channel_mult):
             for _ in range(num_res_blocks):
                 layers = [
-                    ResBlock(
+                    ResBlock(                                     # this is a TimestepBlock
                         ch,
                         time_embed_dim,
                         dropout,
@@ -382,6 +383,7 @@ class UNetModel(nn.Module):
                 input_block_chans.append(ch)
                 ds *= 2
 
+        # =========================== middle blocks ===========================
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
                 ch,
@@ -402,6 +404,7 @@ class UNetModel(nn.Module):
             ),
         )
 
+        # =========================== output blocks ===========================
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mult))[::-1]:
             for i in range(num_res_blocks + 1):
@@ -472,6 +475,7 @@ class UNetModel(nn.Module):
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
 
+        # ====== encoder part of Unet ======
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
@@ -484,6 +488,8 @@ class UNetModel(nn.Module):
             h = module(h, emb)
             hs.append(h)
         h = self.middle_block(h, emb)
+
+        # ====== decoder part of Unet ======
         for module in self.output_blocks:
             cat_in = th.cat([h, hs.pop()], dim=1)
             h = module(cat_in, emb)
